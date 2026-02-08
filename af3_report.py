@@ -345,27 +345,39 @@ def find_chain_boundaries(token_chain_ids):
 def pae_heatmap_to_base64(pae, token_chain_ids, title):
     """Generate a full PAE heatmap and return as base64 PNG string."""
     boundaries = find_chain_boundaries(token_chain_ids)
-    n = len(pae)
 
     fig, ax = plt.subplots(1, 1, figsize=(8, 7))
     im = ax.imshow(pae, cmap=PAE_CMAP, vmin=0, vmax=30, aspect="equal",
                    interpolation="nearest")
 
+    # Chain boundary lines
     for chain, (start, end) in boundaries.items():
         if start > 0:
             ax.axhline(y=start - 0.5, color="white", linewidth=1, alpha=0.8)
             ax.axvline(x=start - 0.5, color="white", linewidth=1, alpha=0.8)
-        mid = (start + end) / 2
-        ax.text(mid, -n * 0.03, f"Chain {chain}", ha="center", va="bottom",
-                fontsize=10, fontweight="bold", color="white")
-        ax.text(-n * 0.03, mid, f"Chain {chain}", ha="right", va="center",
-                fontsize=10, fontweight="bold", color="white", rotation=90)
 
-    cbar = plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04,
+    # Use secondary tick labels for chain names (outside the plot area)
+    chain_mids = []
+    chain_labels = []
+    for chain, (start, end) in boundaries.items():
+        chain_mids.append((start + end) / 2)
+        chain_labels.append(f"Chain {chain}")
+
+    ax2_x = ax.secondary_xaxis("top")
+    ax2_x.set_xticks(chain_mids)
+    ax2_x.set_xticklabels(chain_labels, fontsize=9, fontweight="bold", color="white")
+    ax2_x.tick_params(length=0, pad=4, colors="white")
+
+    ax2_y = ax.secondary_yaxis("right")
+    ax2_y.set_yticks(chain_mids)
+    ax2_y.set_yticklabels(chain_labels, fontsize=9, fontweight="bold", color="white")
+    ax2_y.tick_params(length=0, pad=4, colors="white")
+
+    cbar = plt.colorbar(im, ax=ax, fraction=0.046, pad=0.1,
                         label="Predicted Aligned Error (Å)")
     cbar.ax.tick_params(labelsize=9)
 
-    ax.set_title(title, fontsize=13, fontweight="bold", pad=15)
+    ax.set_title(title, fontsize=13, fontweight="bold", pad=8)
     ax.set_xlabel("Scored residue", fontsize=10)
     ax.set_ylabel("Aligned residue", fontsize=10)
     ax.tick_params(labelsize=8)
