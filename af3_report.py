@@ -357,20 +357,36 @@ def pae_heatmap_to_base64(pae, token_chain_ids, title):
             ax.axvline(x=start - 0.5, color="white", linewidth=1, alpha=0.8)
 
     # Use secondary tick labels for chain names (outside the plot area)
+    # Check min spacing between labels to avoid overlap
+    n_total = len(pae)
     chain_mids = []
     chain_labels = []
+    chain_sizes = []
     for chain, (start, end) in boundaries.items():
         chain_mids.append((start + end) / 2)
+        chain_sizes.append(end - start)
         chain_labels.append(f"Chain {chain}")
+
+    # If any adjacent labels are too close, shorten to just letter
+    min_gap = n_total * 0.08  # need at least ~8% of total for "Chain X" label
+    needs_short = False
+    for i in range(len(chain_mids) - 1):
+        if chain_mids[i + 1] - chain_mids[i] < min_gap:
+            needs_short = True
+            break
+    if needs_short:
+        chain_labels = [ch for ch, _ in boundaries.items()]
+
+    label_fontsize = 8 if needs_short else 9
 
     ax2_x = ax.secondary_xaxis("top")
     ax2_x.set_xticks(chain_mids)
-    ax2_x.set_xticklabels(chain_labels, fontsize=9, fontweight="bold", color="white")
+    ax2_x.set_xticklabels(chain_labels, fontsize=label_fontsize, fontweight="bold", color="white")
     ax2_x.tick_params(length=0, pad=4, colors="white")
 
     ax2_y = ax.secondary_yaxis("right")
     ax2_y.set_yticks(chain_mids)
-    ax2_y.set_yticklabels(chain_labels, fontsize=9, fontweight="bold", color="white")
+    ax2_y.set_yticklabels(chain_labels, fontsize=label_fontsize, fontweight="bold", color="white")
     ax2_y.tick_params(length=0, pad=4, colors="white")
 
     cbar = plt.colorbar(im, ax=ax, fraction=0.046, pad=0.1,
