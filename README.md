@@ -20,15 +20,19 @@ Works with any AlphaFold3 output: protein homodimers, heterodimers, protein+DNA 
 
 ### PAE Heatmap (CTCF protein + DNA complex, 3 chains)
 
-![PAE Heatmap](docs/pae_heatmap.png)
+![PAE Heatmap](https://raw.githubusercontent.com/aglabx/alpha_fold_viewer/main/docs/pae_heatmap.png)
 
 ### Interface PAE Sub-matrix
 
-![Interface PAE](docs/pae_interface.png)
+![Interface PAE](https://raw.githubusercontent.com/aglabx/alpha_fold_viewer/main/docs/pae_interface.png)
 
 ### Sequence Strip with pLDDT and Interface Markers
 
-![Sequence Strip](docs/sequence_strip.png)
+![Sequence Strip](https://raw.githubusercontent.com/aglabx/alpha_fold_viewer/main/docs/sequence_strip.png)
+
+### Colored Sequence with Interface Residues
+
+![Colored Sequence](https://raw.githubusercontent.com/aglabx/alpha_fold_viewer/main/docs/colored_sequence.png)
 
 ## Installation
 
