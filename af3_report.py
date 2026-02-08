@@ -162,30 +162,55 @@ def classify_chain(res_names):
 
 
 def get_chain_info(atoms):
-    """Extract chain-level summary: type, length, sequence."""
+    """Extract chain-level summary: type, length, sequence, per-residue pLDDT."""
     unique_chains = sorted(set(atoms["chain_id"]))
     info = {}
     for chain in unique_chains:
         mask = atoms["chain_id"] == chain
         res_names = atoms["res_name"][mask]
         res_ids = atoms["res_id"][mask]
+        plddts = atoms["plddt"][mask]
 
+        # Collect unique residues with per-residue mean pLDDT
         unique_residues = []
+        per_res_plddt = []
+        per_res_ids = []
         seen = set()
-        for rn, ri in zip(res_names, res_ids):
-            key = (rn, ri)
+        res_plddt_accum = {}
+        for rn, ri, pl in zip(res_names, res_ids, plddts):
+            key = (rn, int(ri))
             if key not in seen:
                 seen.add(key)
                 unique_residues.append(rn)
+                per_res_ids.append(int(ri))
+                res_plddt_accum[key] = [float(pl)]
+            else:
+                res_plddt_accum[key].append(float(pl))
+
+        for rn, ri in zip(unique_residues, per_res_ids):
+            key = (rn, ri)
+            per_res_plddt.append(round(np.mean(res_plddt_accum[key]), 1))
 
         chain_type = classify_chain(unique_residues)
-        plddts = atoms["plddt"][mask]
+
+        # Build one-letter sequence
+        if chain_type == "protein":
+            sequence = "".join(AA3_TO_1.get(rn, "X") for rn in unique_residues)
+        elif chain_type == "DNA":
+            sequence = "".join(rn.replace("D", "") for rn in unique_residues)
+        elif chain_type == "RNA":
+            sequence = "".join(rn for rn in unique_residues)
+        else:
+            sequence = "".join(rn[:3] for rn in unique_residues)
 
         info[chain] = {
             "type": chain_type,
             "length": len(unique_residues),
             "mean_plddt": round(float(np.mean(plddts)), 1),
             "residue_names": unique_residues,
+            "sequence": sequence,
+            "per_res_plddt": per_res_plddt,
+            "per_res_ids": per_res_ids,
         }
     return info
 
@@ -417,6 +442,86 @@ def interface_pae_to_base64(pae, token_chain_ids, token_res_ids, chain_a, chain_
     return base64.b64encode(buf.read()).decode("ascii")
 
 
+def sequence_strip_to_base64(chain_id, chain_info, interface_residues=None):
+    """Generate a linear sequence heatmap strip showing pLDDT and interface positions.
+
+    Args:
+        chain_id: chain identifier
+        chain_info: dict with sequence, per_res_plddt, per_res_ids, type
+        interface_residues: set of residue IDs that are at interfaces (optional)
+
+    Returns:
+        base64 encoded PNG string
+    """
+    seq = chain_info["sequence"]
+    plddt = chain_info["per_res_plddt"]
+    res_ids = chain_info["per_res_ids"]
+    n = len(seq)
+
+    if n == 0:
+        return None
+
+    # Figure: 2 rows — top=pLDDT heatmap, bottom=interface markers
+    has_interfaces = interface_residues and len(interface_residues) > 0
+    n_rows = 2 if has_interfaces else 1
+    height_ratios = [1, 0.4] if has_interfaces else [1]
+
+    fig_width = max(10, min(20, n / 30))
+    fig, axes = plt.subplots(n_rows, 1, figsize=(fig_width, 0.8 * n_rows + 0.4),
+                              gridspec_kw={"height_ratios": height_ratios} if n_rows > 1 else {})
+    if n_rows == 1:
+        axes = [axes]
+
+    # pLDDT strip
+    ax_plddt = axes[0]
+    plddt_arr = np.array(plddt).reshape(1, -1)
+    ax_plddt.imshow(plddt_arr, aspect="auto", cmap="RdYlGn", vmin=0, vmax=100,
+                    interpolation="nearest")
+    ax_plddt.set_yticks([])
+    ax_plddt.set_title(f"Chain {chain_id} — pLDDT ({chain_info['type']}, {n} residues)",
+                       fontsize=10, fontweight="bold", color="white", pad=4)
+
+    # Tick labels every ~50 residues
+    tick_step = max(1, n // 20)
+    xticks = list(range(0, n, tick_step))
+    ax_plddt.set_xticks(xticks)
+    ax_plddt.set_xticklabels([res_ids[i] for i in xticks], fontsize=6, color="white")
+
+    if not has_interfaces:
+        ax_plddt.set_xlabel("Residue", fontsize=8, color="white")
+
+    # Interface markers strip
+    if has_interfaces:
+        ax_iface = axes[1]
+        iface_arr = np.zeros((1, n))
+        for i, rid in enumerate(res_ids):
+            if rid in interface_residues:
+                iface_arr[0, i] = 1.0
+
+        from matplotlib.colors import ListedColormap
+        iface_cmap = ListedColormap(["#1e293b", "#0891b2"])
+        ax_iface.imshow(iface_arr, aspect="auto", cmap=iface_cmap, vmin=0, vmax=1,
+                        interpolation="nearest")
+        ax_iface.set_yticks([0])
+        ax_iface.set_yticklabels(["interface"], fontsize=7, color="#0891b2")
+        ax_iface.set_xticks(xticks)
+        ax_iface.set_xticklabels([res_ids[i] for i in xticks], fontsize=6, color="white")
+        ax_iface.set_xlabel("Residue", fontsize=8, color="white")
+        ax_iface.tick_params(colors="white")
+
+    for ax in axes:
+        ax.set_facecolor("#0f172a")
+        ax.tick_params(colors="white", labelsize=6)
+
+    fig.patch.set_facecolor("#0f172a")
+    plt.tight_layout()
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", dpi=150, bbox_inches="tight", facecolor="#0f172a")
+    plt.close(fig)
+    buf.seek(0)
+    return base64.b64encode(buf.read()).decode("ascii")
+
+
 # ── ZIP Extraction & Discovery ─────────────────────────────────────────────────
 
 def extract_zip(zip_path, tmp_dir):
@@ -518,6 +623,19 @@ def process_all_models(model_dir, contact_dist=CONTACT_DISTANCE):
                             "b64": b64,
                         })
 
+        # Collect interface residues per chain (for sequence strip highlighting)
+        iface_residues_by_chain = {}
+        for iface in interfaces:
+            iface_residues_by_chain.setdefault(iface["chain_a"], set()).update(iface["residues_a"])
+            iface_residues_by_chain.setdefault(iface["chain_b"], set()).update(iface["residues_b"])
+
+        # Generate sequence heatmap strips
+        seq_strips = {}
+        for cid, ci in chain_info.items():
+            b64 = sequence_strip_to_base64(cid, ci, iface_residues_by_chain.get(cid))
+            if b64:
+                seq_strips[cid] = b64
+
         # Strip heavy contacts detail for summary
         interfaces_light = []
         for iface in interfaces:
@@ -531,6 +649,7 @@ def process_all_models(model_dir, contact_dist=CONTACT_DISTANCE):
             "interfaces": interfaces_light,
             "pae_full_b64": pae_full_b64,
             "pae_interface_b64s": pae_interface_b64s,
+            "seq_strips": seq_strips,
         }
         models.append(model_data)
 
@@ -559,53 +678,78 @@ def generate_html(data):
     best_model = models_sorted[0] if models_sorted else None
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
 
-    # Extract sequences from job_request
+    # Model name from job_request
+    model_name = name
+    if job_request:
+        model_name = job_request.get("name", name)
+
+    # Extract sequences from job_request — build table + FASTA blocks
     sequences_html = ""
+    fasta_blocks = []
     if job_request:
         seqs = job_request.get("sequences", [])
         if seqs:
             rows = []
             for i, seq in enumerate(seqs):
+                count = 1
+                seq_str = ""
                 if "proteinChain" in seq:
                     pc = seq["proteinChain"]
                     seq_str = pc.get("sequence", "")
                     chain_type = "Protein"
                     length = len(seq_str)
-                    desc = seq_str[:60] + "..." if len(seq_str) > 60 else seq_str
+                    count = pc.get("count", 1)
                 elif "dnaSequence" in seq:
                     ds = seq["dnaSequence"]
                     seq_str = ds.get("sequence", "")
                     chain_type = "DNA"
                     length = len(seq_str)
-                    desc = seq_str[:60] + "..." if len(seq_str) > 60 else seq_str
+                    count = ds.get("count", 1)
                 elif "rnaSequence" in seq:
                     rs = seq["rnaSequence"]
                     seq_str = rs.get("sequence", "")
                     chain_type = "RNA"
                     length = len(seq_str)
-                    desc = seq_str[:60] + "..." if len(seq_str) > 60 else seq_str
+                    count = rs.get("count", 1)
                 elif "ligand" in seq:
                     lig = seq["ligand"]
                     chain_type = "Ligand"
                     length = "-"
-                    desc = lig.get("ccdCodes", ["?"])[0] if "ccdCodes" in lig else "custom"
+                    count = lig.get("count", 1)
+                    seq_str = lig.get("ccdCodes", ["?"])[0] if "ccdCodes" in lig else "custom"
                 else:
                     chain_type = "Unknown"
                     length = "-"
-                    desc = str(seq)[:60]
+                    seq_str = ""
 
+                count_badge = f" x{count}" if count > 1 else ""
+                desc = seq_str[:60] + "..." if len(seq_str) > 60 else seq_str
                 rows.append(f"""<tr>
                     <td>{i + 1}</td>
-                    <td><span class="badge badge-{chain_type.lower()}">{chain_type}</span></td>
+                    <td><span class="badge badge-{chain_type.lower()}">{chain_type}{count_badge}</span></td>
                     <td>{length}</td>
                     <td class="seq-preview">{escape(str(desc))}</td>
                 </tr>""")
-            sequences_html = "\n".join(rows)
 
-    # Model name from job_request
-    model_name = name
-    if job_request:
-        model_name = job_request.get("name", name)
+                # Generate FASTA block for each copy
+                if seq_str and chain_type != "Ligand":
+                    for copy_n in range(count):
+                        fasta_header = f">{model_name}_{chain_type}_{i+1}" + (f"_copy{copy_n+1}" if count > 1 else "")
+                        fasta_text = fasta_header + "\\n" + seq_str
+                        fasta_display = escape(fasta_header) + "\n" + escape(seq_str)
+                        fasta_blocks.append(f"""
+                        <div class="fasta-block">
+                            <div class="fasta-header">
+                                <span class="badge badge-{chain_type.lower()}">{chain_type}</span>
+                                {length} aa{f' (copy {copy_n+1}/{count})' if count > 1 else ''}
+                                <button class="copy-btn" onclick="copyFasta(this, '{fasta_text}')" title="Copy FASTA">
+                                    Copy
+                                </button>
+                            </div>
+                            <pre class="fasta-pre">{fasta_display}</pre>
+                        </div>""")
+
+            sequences_html = "\n".join(rows)
 
     # Confidence table
     confidence_rows = []
@@ -655,6 +799,68 @@ def generate_html(data):
                 <td class="mono">{iface['high_conf_pct']:.0f}%</td>
             </tr>""")
         interface_summary_rows = "\n".join(rows)
+
+    # Sequence section (best model)
+    sequence_sections = []
+    if best_model:
+        for cid, ci in sorted(best_model["chain_info"].items()):
+            seq = ci.get("sequence", "")
+            if not seq:
+                continue
+
+            # Build pLDDT-colored sequence HTML
+            colored_chars = []
+            for ch, pl in zip(seq, ci.get("per_res_plddt", [])):
+                if pl >= 90:
+                    color = "#10b981"  # green - very high
+                elif pl >= 70:
+                    color = "#22d3ee"  # cyan - confident
+                elif pl >= 50:
+                    color = "#f59e0b"  # yellow - low
+                else:
+                    color = "#ef4444"  # red - very low
+                colored_chars.append(f'<span style="color:{color}">{escape(ch)}</span>')
+
+            # Mark interface residues with underline + highlight
+            iface_res = set()
+            for iface in best_model["interfaces"]:
+                if iface["chain_a"] == cid:
+                    iface_res.update(iface["residues_a"])
+                if iface["chain_b"] == cid:
+                    iface_res.update(iface["residues_b"])
+
+            if iface_res:
+                highlighted_chars = []
+                for i, (ch, pl, rid) in enumerate(zip(seq, ci.get("per_res_plddt", []), ci.get("per_res_ids", []))):
+                    if pl >= 90:
+                        color = "#10b981"
+                    elif pl >= 70:
+                        color = "#22d3ee"
+                    elif pl >= 50:
+                        color = "#f59e0b"
+                    else:
+                        color = "#ef4444"
+                    if rid in iface_res:
+                        highlighted_chars.append(
+                            f'<span style="color:{color};background:rgba(8,145,178,0.3);'
+                            f'border-bottom:2px solid #0891b2;font-weight:700">{escape(ch)}</span>'
+                        )
+                    else:
+                        highlighted_chars.append(f'<span style="color:{color}">{escape(ch)}</span>')
+                colored_chars = highlighted_chars
+
+            # Sequence strip image
+            strip_b64 = best_model.get("seq_strips", {}).get(cid, "")
+            strip_img = f'<img src="data:image/png;base64,{strip_b64}" alt="Sequence strip {cid}" class="pae-img" style="margin-top:0.5rem">' if strip_b64 else ""
+
+            iface_label = f' &middot; <span style="background:rgba(8,145,178,0.3);border-bottom:2px solid #0891b2;padding:0 3px">{len(iface_res)} interface residues</span>' if iface_res else ""
+
+            sequence_sections.append(f"""
+            <div class="seq-block">
+                <h4>Chain {cid} — {ci['type']} ({ci['length']} residues, mean pLDDT {ci['mean_plddt']}){iface_label}</h4>
+                {strip_img}
+                <div class="seq-display">{''.join(colored_chars)}</div>
+            </div>""")
 
     # PAE heatmaps section
     pae_sections = []
@@ -893,6 +1099,91 @@ h4 {{
     word-break: break-all;
 }}
 
+.seq-block {{
+    margin-bottom: 1.5rem;
+}}
+.seq-display {{
+    font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+    font-size: 0.72rem;
+    line-height: 1.5;
+    word-break: break-all;
+    background: rgba(15, 23, 42, 0.5);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.8rem;
+    margin-top: 0.3rem;
+    letter-spacing: 0.5px;
+}}
+.seq-legend {{
+    display: flex;
+    gap: 1rem;
+    margin: 0.5rem 0;
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    flex-wrap: wrap;
+}}
+.seq-legend span {{
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+}}
+.seq-legend .dot {{
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    display: inline-block;
+}}
+
+.fasta-block {{
+    margin-top: 0.8rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+}}
+.fasta-header {{
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem 0.8rem;
+    background: rgba(8, 145, 178, 0.08);
+    border-bottom: 1px solid var(--border);
+    font-size: 0.8rem;
+    color: var(--text-dim);
+}}
+.fasta-pre {{
+    font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+    font-size: 0.72rem;
+    line-height: 1.4;
+    padding: 0.6rem 0.8rem;
+    margin: 0;
+    white-space: pre-wrap;
+    word-break: break-all;
+    color: var(--text);
+    background: rgba(15, 23, 42, 0.5);
+    max-height: 200px;
+    overflow-y: auto;
+}}
+.copy-btn {{
+    margin-left: auto;
+    padding: 0.2rem 0.6rem;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--accent-light);
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}}
+.copy-btn:hover {{
+    background: var(--card-hover);
+    border-color: var(--accent);
+}}
+.copy-btn.copied {{
+    background: rgba(16, 185, 129, 0.2);
+    border-color: var(--green);
+    color: var(--green);
+}}
+
 .badge {{
     display: inline-block;
     padding: 0.15rem 0.5rem;
@@ -981,7 +1272,7 @@ h4 {{
     </div>
 </div>
 
-{'<h2>Input Sequences</h2>' + '<div class="card"><table class="data-table"><thead><tr><th>#</th><th>Type</th><th>Length</th><th>Sequence</th></tr></thead><tbody>' + sequences_html + '</tbody></table></div>' if sequences_html else ''}
+{'<h2>Input Sequences</h2>' + '<div class="card"><table class="data-table"><thead><tr><th>#</th><th>Type</th><th>Length</th><th>Sequence</th></tr></thead><tbody>' + sequences_html + '</tbody></table>' + ''.join(fasta_blocks) + '</div>' if sequences_html else ''}
 
 <h2>Confidence Overview</h2>
 <div class="card">
@@ -1001,6 +1292,8 @@ h4 {{
 </div>
 
 {'<h2>Interface Analysis (Best Model)</h2>' + '<div class="card"><table class="data-table"><thead><tr><th>Interface</th><th>Res. A</th><th>Res. B</th><th>Atom Contacts</th><th>pLDDT A</th><th>pLDDT B</th><th>Avg PAE</th><th>PAE &lt;10Å</th><th>High-conf</th></tr></thead><tbody>' + interface_summary_rows + '</tbody></table></div>' if not is_single_chain else '<div class="card" style="color: var(--text-dim);">Single chain model — no interface analysis.</div>'}
+
+{'<h2>Chain Sequences (Best Model)</h2><div class="card"><div class="seq-legend"><span><span class="dot" style="background:#10b981"></span> pLDDT &ge; 90</span><span><span class="dot" style="background:#22d3ee"></span> pLDDT &ge; 70</span><span><span class="dot" style="background:#f59e0b"></span> pLDDT &ge; 50</span><span><span class="dot" style="background:#ef4444"></span> pLDDT &lt; 50</span><span><span class="dot" style="background:rgba(8,145,178,0.3);border-bottom:2px solid #0891b2"></span> Interface residue</span></div>' + ''.join(sequence_sections) + '</div>' if sequence_sections else ''}
 
 <h2>PAE Heatmaps</h2>
 {''.join(pae_sections) if pae_sections else '<div class="card" style="color: var(--text-dim);">No PAE data available.</div>'}
@@ -1025,6 +1318,17 @@ function toggleCollapse(el) {{
         arrow.textContent = '\\u25B6';
         el.classList.add('collapsed');
     }}
+}}
+function copyFasta(btn, text) {{
+    const decoded = text.replace(/\\\\n/g, '\\n');
+    navigator.clipboard.writeText(decoded).then(function() {{
+        btn.textContent = 'Copied!';
+        btn.classList.add('copied');
+        setTimeout(function() {{
+            btn.textContent = 'Copy';
+            btn.classList.remove('copied');
+        }}, 2000);
+    }});
 }}
 </script>
 
