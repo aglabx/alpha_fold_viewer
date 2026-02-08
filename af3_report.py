@@ -28,6 +28,8 @@ from pathlib import Path
 import numpy as np
 from scipy.spatial import cKDTree
 
+__version__ = "0.1.5"
+
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -1383,6 +1385,8 @@ Examples:
     af3-report my_prediction.zip --contact-dist 6.0
         """,
     )
+    parser.add_argument("-V", "--version", action="version",
+                        version=f"%(prog)s {__version__}")
     parser.add_argument("input_zip", help="Path to AlphaFold3 output ZIP file")
     parser.add_argument("-o", "--output", default=None,
                         help="Output HTML file (default: {zip_name}_report.html)")
