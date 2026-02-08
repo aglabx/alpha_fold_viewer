@@ -10,7 +10,7 @@ readme = "README.md"
 license = "MIT"
 requires-python = ">=3.8"
 authors = [
-    {name = "AGLab", email = "ad3002@gmail.com"},
+    {name = "Aleksey Komissarov", email = "ad3002@gmail.com"},
 ]
 keywords = ["alphafold", "alphafold3", "structural-biology", "protein-structure", "pae", "html-report"]
 classifiers = [
