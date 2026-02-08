@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "alpha-fold-viewer"
-version = "0.1.1"
+version = "0.1.2"
 description = "AlphaFold3 ZIP → Standalone HTML Report with PAE heatmaps, confidence scores, and interface analysis"
 readme = "README.md"
 license = "MIT"
