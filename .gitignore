@@ -1,0 +1,15 @@
+# Test data
+examples/*.zip
+examples/*.html
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+dist/
+build/
+*.egg
+
+# OS
+.DS_Store
+Thumbs.db
