@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "alpha-fold-viewer"
+version = "0.1.0"
+description = "AlphaFold3 ZIP → Standalone HTML Report with PAE heatmaps, confidence scores, and interface analysis"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.8"
+authors = [
+    {name = "AGLab", email = "ad3002@gmail.com"},
+]
+keywords = ["alphafold", "alphafold3", "structural-biology", "protein-structure", "pae", "html-report"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+    "Topic :: Scientific/Engineering :: Visualization",
+]
+dependencies = [
+    "numpy",
+    "scipy",
+    "matplotlib",
+]
+
+[project.urls]
+Homepage = "https://github.com/aglabx/alpha_fold_viewer"
+Repository = "https://github.com/aglabx/alpha_fold_viewer"
+Issues = "https://github.com/aglabx/alpha_fold_viewer/issues"
+
+[project.scripts]
+af3-report = "af3_report:main"
+
+[tool.setuptools]
+py-modules = ["af3_report"]

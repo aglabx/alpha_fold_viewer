@@ -5,9 +5,9 @@ Takes an AF3 output ZIP file and produces a single beautiful standalone HTML
 report with embedded PAE heatmaps, confidence scores, and interface analysis.
 
 Usage:
-    python af3_report.py fold_tigd4_dimer.zip
-    python af3_report.py fold_tigd4_dimer.zip -o report.html
-    python af3_report.py fold_tigd4_dimer.zip --contact-dist 6.0
+    af3-report my_prediction.zip
+    af3-report my_prediction.zip -o report.html
+    af3-report my_prediction.zip --contact-dist 6.0
 
 Output:
     A single standalone HTML file with all images embedded as base64 data URIs.
@@ -1346,9 +1346,9 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-    python af3_report.py fold_tigd4_dimer.zip
-    python af3_report.py fold_tigd4_dimer.zip -o my_report.html
-    python af3_report.py fold_tigd4_dimer.zip --contact-dist 6.0
+    af3-report my_prediction.zip
+    af3-report my_prediction.zip -o report.html
+    af3-report my_prediction.zip --contact-dist 6.0
         """,
     )
     parser.add_argument("input_zip", help="Path to AlphaFold3 output ZIP file")

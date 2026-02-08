@@ -6,20 +6,44 @@
 
 Takes an AlphaFold3 prediction ZIP file and produces a single HTML file containing:
 
-- **Input summary** — sequences, chain types, lengths
+- **Input summary** — sequences in FASTA format with copy buttons, chain types, lengths
 - **Confidence overview** — all models ranked by `ranking_score` with ipTM, pTM, fraction disordered, clash status
+- **Chain sequences** — full sequences with per-residue pLDDT coloring and interface residue highlighting
+- **Sequence heatmap strips** — linear pLDDT bars with interface position markers
 - **PAE heatmaps** — full predicted aligned error matrices with chain boundaries (embedded as base64 images)
 - **Interface analysis** — inter-chain contacts with residue counts, mean PAE, pLDDT, and high-confidence percentages
 - **Per-model details** — collapsible sections with chain info and interface residue ranges
 
 The HTML is fully standalone — all images are embedded as data URIs, CSS is inline, no external dependencies. Open it in any browser, share via email, or include in presentations.
 
+Works with any AlphaFold3 output: protein homodimers, heterodimers, protein+DNA complexes, multi-chain assemblies.
+
+### PAE Heatmap (CTCF protein + DNA complex, 3 chains)
+
+![PAE Heatmap](docs/pae_heatmap.png)
+
+### Interface PAE Sub-matrix
+
+![Interface PAE](docs/pae_interface.png)
+
+### Sequence Strip with pLDDT and Interface Markers
+
+![Sequence Strip](docs/sequence_strip.png)
+
 ## Installation
+
+### From PyPI
+
+```bash
+pip install alpha-fold-viewer
+```
+
+### From source
 
 ```bash
 git clone https://github.com/aglabx/alpha_fold_viewer.git
 cd alpha_fold_viewer
-pip install -r requirements.txt
+pip install .
 ```
 
 Requirements: Python 3.8+, numpy, scipy, matplotlib.
@@ -27,23 +51,26 @@ Requirements: Python 3.8+, numpy, scipy, matplotlib.
 ## Usage
 
 ```bash
-# Basic usage — generates fold_tigd4_dimer_report.html
-python af3_report.py fold_tigd4_dimer.zip
+# Basic usage — generates fold_ctcf_report.html
+af3-report fold_ctcf_dimer.zip
 
 # Custom output path
-python af3_report.py fold_tigd4_dimer.zip -o my_report.html
+af3-report fold_ctcf_dimer.zip -o ctcf_report.html
 
 # Stricter contact distance (default: 8.0 Å)
-python af3_report.py fold_tigd4_dimer.zip --contact-dist 6.0
+af3-report fold_ctcf_dimer.zip --contact-dist 6.0
 
 # Keep extracted temp files for debugging
-python af3_report.py fold_tigd4_dimer.zip --keep-tmp
+af3-report fold_ctcf_dimer.zip --keep-tmp
+
+# Also works as a Python script
+python af3_report.py fold_ctcf_dimer.zip
 ```
 
 ### CLI Reference
 
 ```
-python af3_report.py INPUT_ZIP [-o OUTPUT_HTML] [--contact-dist 8.0] [--keep-tmp]
+af3-report INPUT_ZIP [-o OUTPUT_HTML] [--contact-dist 8.0] [--keep-tmp]
 
 Positional:
   INPUT_ZIP          Path to AlphaFold3 output ZIP file
@@ -67,6 +94,13 @@ Models are sorted by `ranking_score` (highest first). The best model is highligh
 | pTM | Predicted TM-score for overall structure |
 | Frac. Disordered | Fraction of residues predicted as disordered |
 | Clash | Whether the model has steric clashes |
+
+### Chain Sequences
+
+Each chain is displayed with:
+- Full sequence colored by per-residue pLDDT (green ≥90, cyan ≥70, yellow ≥50, red <50)
+- Interface residues highlighted with cyan background
+- Linear heatmap strip showing pLDDT along the sequence with interface markers
 
 ### Interface Analysis
 
