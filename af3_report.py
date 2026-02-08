@@ -567,32 +567,36 @@ def extract_zip(zip_path, tmp_dir):
 def discover_models(model_dir):
     """Auto-discover model files in the extracted directory.
 
-    Returns list of model indices found.
+    Returns (prefix, sorted list of model indices).
+    prefix is the filename part before '_model_'.
     """
     indices = []
+    prefix = None
     for f in sorted(model_dir.iterdir()):
         if f.name.endswith(".cif") and "_model_" in f.name:
             # Extract index from e.g. fold_tigd4_dimer_model_3.cif
-            idx_str = f.stem.split("_model_")[-1]
+            parts = f.stem.split("_model_")
+            idx_str = parts[-1]
             try:
                 indices.append(int(idx_str))
+                if prefix is None:
+                    prefix = parts[0]
             except ValueError:
                 pass
-    return sorted(indices)
+    return prefix or model_dir.name, sorted(indices)
 
 
 # ── Main Processing Pipeline ───────────────────────────────────────────────────
 
 def process_all_models(model_dir, contact_dist=CONTACT_DISTANCE):
     """Process all models in a directory, return structured data for HTML."""
-    name = model_dir.name
-    model_indices = discover_models(model_dir)
+    name, model_indices = discover_models(model_dir)
 
     if not model_indices:
         print(f"ERROR: No model CIF files found in {model_dir}", file=sys.stderr)
         sys.exit(1)
 
-    print(f"Found {len(model_indices)} models: {model_indices}")
+    print(f"Found {len(model_indices)} models: {model_indices} (prefix: {name})")
 
     # Load job request
     job_request = None
